@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Paste } from '../types';
 import { highlightCodeLine } from '../utils/highlighter';
+import { authenticatedFetch } from '../auth';
 
 interface ViewPasteProps {
   pasteId: string;
@@ -40,7 +41,7 @@ export const ViewPaste: React.FC<ViewPasteProps> = ({ pasteId, onClonePaste, onB
       const headers: Record<string, string> = {};
       if (password) headers['x-paste-password'] = password;
 
-      const res = await fetch('/api/pastes/' + pasteId, { headers });
+      const res = await authenticatedFetch('/api/pastes/' + pasteId, { headers });
 
       const raw = await res.text();
       if (!raw || !raw.trim()) {
@@ -74,7 +75,7 @@ export const ViewPaste: React.FC<ViewPasteProps> = ({ pasteId, onClonePaste, onB
   };
 
   useEffect(() => {
-    if (lastFetchedIdRef.current === pasteId && paste) return;
+    if (lastFetchedIdRef.current === pasteId) return;
     lastFetchedIdRef.current = pasteId;
     fetchPaste();
   }, [pasteId]);
@@ -122,7 +123,7 @@ export const ViewPaste: React.FC<ViewPasteProps> = ({ pasteId, onClonePaste, onB
     if (!deleteTokenInput.trim()) return;
     setDeleteError(null);
     try {
-      const res = await fetch('/api/pastes/' + pasteId, {
+      const res = await authenticatedFetch('/api/pastes/' + pasteId, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ delete_token: deleteTokenInput.trim() }),

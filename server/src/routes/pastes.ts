@@ -2,8 +2,10 @@ import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import db, { Paste } from '../db';
+import { requireLogin } from '../auth';
 
 const router = Router();
+router.use(requireLogin);
 
 function generateId(length = 8): string {
   return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
@@ -33,6 +35,7 @@ function calculateExpiration(ttl?: string | number): string | null {
 router.post('/', async (req: Request, res: Response) => {
   try {
     const { title, content, language, is_private, burn_after_reading, password, ttl, custom_id } = req.body;
+    const organizationId = req.organizationId!;
 
     if (!content || typeof content !== 'string' || !content.trim()) {
       return res.status(400).json({ success: false, error: 'Content is required' });
@@ -74,8 +77,8 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     const stmt = db.prepare(`
-      INSERT INTO pastes (id, title, content, language, is_private, burn_after_reading, password_hash, delete_token, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO pastes (id, title, content, language, is_private, burn_after_reading, password_hash, delete_token, expires_at, organization_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -87,7 +90,8 @@ router.post('/', async (req: Request, res: Response) => {
       burn_after_reading ? 1 : 0,
       passwordHash,
       deleteToken,
-      expiresAt
+      expiresAt,
+      organizationId
     );
 
     const origin = req.get('origin');
@@ -125,9 +129,11 @@ router.get('/', (req: Request, res: Response) => {
     const search = req.query.search ? `%${(req.query.search as string).trim()}%` : null;
     const lang = req.query.lang ? (req.query.lang as string).trim().toLowerCase() : null;
 
+    const organizationId = req.organizationId!;
     let countQuery = `
       SELECT COUNT(*) as total FROM pastes 
-      WHERE is_private = 0 
+      WHERE organization_id = ?
+        AND is_private = 0
         AND burn_after_reading = 0 
         AND password_hash IS NULL 
         AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
@@ -136,13 +142,14 @@ router.get('/', (req: Request, res: Response) => {
     let dataQuery = `
       SELECT id, title, language, views, created_at, expires_at, LENGTH(content) as char_count 
       FROM pastes 
-      WHERE is_private = 0 
+      WHERE organization_id = ?
+        AND is_private = 0
         AND burn_after_reading = 0 
         AND password_hash IS NULL 
         AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
     `;
 
-    const params: any[] = [];
+    const params: any[] = [organizationId];
     if (search) {
       countQuery += ` AND (title LIKE ? OR content LIKE ?)`;
       dataQuery += ` AND (title LIKE ? OR content LIKE ?)`;
@@ -179,7 +186,7 @@ router.get('/', (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const pasteId = req.params.id;
-    const paste = db.prepare('SELECT * FROM pastes WHERE id = ?').get(pasteId) as Paste | undefined;
+    const paste = db.prepare('SELECT * FROM pastes WHERE id = ? AND organization_id = ?').get(pasteId, req.organizationId) as Paste | undefined;
 
     if (!paste) {
       return res.status(404).json({ success: false, error: 'Paste not found or has expired' });
@@ -240,7 +247,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 router.get('/:id/raw', async (req: Request, res: Response) => {
   try {
     const pasteId = req.params.id;
-    const paste = db.prepare('SELECT * FROM pastes WHERE id = ?').get(pasteId) as Paste | undefined;
+    const paste = db.prepare('SELECT * FROM pastes WHERE id = ? AND organization_id = ?').get(pasteId, req.organizationId) as Paste | undefined;
 
     if (!paste) {
       return res.status(404).send('Paste not found or has expired.\n');
@@ -285,7 +292,7 @@ router.delete('/:id', (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Deletion token is required' });
     }
 
-    const paste = db.prepare('SELECT delete_token FROM pastes WHERE id = ?').get(pasteId) as { delete_token: string } | undefined;
+    const paste = db.prepare('SELECT delete_token FROM pastes WHERE id = ? AND organization_id = ?').get(pasteId, req.organizationId) as { delete_token: string } | undefined;
 
     if (!paste) {
       return res.status(404).json({ success: false, error: 'Paste not found' });
@@ -295,7 +302,7 @@ router.delete('/:id', (req: Request, res: Response) => {
       return res.status(403).json({ success: false, error: 'Invalid deletion token' });
     }
 
-    db.prepare('DELETE FROM pastes WHERE id = ?').run(pasteId);
+    db.prepare('DELETE FROM pastes WHERE id = ? AND organization_id = ?').run(pasteId, req.organizationId);
     return res.json({ success: true, message: 'Paste deleted successfully' });
   } catch (err) {
     console.error('Error deleting paste:', err);

@@ -1,12 +1,17 @@
 import React from 'react';
-import { Code2, PlusCircle, Globe, FileCode2 } from 'lucide-react';
+import type { User } from '@supabase/supabase-js';
+import { Code2, PlusCircle, Globe, UserRound } from 'lucide-react';
+import { workspaceDetails } from '../auth';
 
 interface NavbarProps {
-  activeTab: 'create' | 'explore' | 'docs';
-  setActiveTab: (tab: 'create' | 'explore' | 'docs') => void;
+  activeTab: 'create' | 'explore' | 'profile';
+  setActiveTab: (tab: 'create' | 'explore' | 'profile') => void;
+  user?: User | null;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
+export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, user }) => {
+  const orgName = user?.email ? workspaceDetails(user.email).orgName : null;
+
   return (
     <header className="navbar">
       <div className="navbar-inner">
@@ -15,6 +20,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
             <Code2 size={20} />
           </div>
           <span>PasteBin</span>
+          {orgName && <span className="brand-tag">{orgName}</span>}
         </div>
 
         <nav className="nav-links">
@@ -35,11 +41,11 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
           </button>
 
           <button
-            className={`nav-btn ${activeTab === 'docs' ? 'active' : ''}`}
-            onClick={() => setActiveTab('docs')}
+            className={`nav-btn ${activeTab === 'profile' ? 'active' : ''}`}
+            onClick={() => setActiveTab('profile')}
           >
-            <FileCode2 size={17} />
-            <span>API Docs</span>
+            <UserRound size={17} />
+            <span>Profile</span>
           </button>
         </nav>
       </div>

@@ -37,6 +37,12 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_pastes_expires ON pastes(expires_at);
 `);
 
+const pasteColumns = db.prepare('PRAGMA table_info(pastes)').all() as Array<{ name: string }>;
+if (!pasteColumns.some((column) => column.name === 'organization_id')) {
+  db.exec('ALTER TABLE pastes ADD COLUMN organization_id TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_pastes_organization_created ON pastes(organization_id, created_at DESC)');
+}
+
 export interface Paste {
   id: string;
   title: string;
@@ -49,6 +55,7 @@ export interface Paste {
   views: number;
   expires_at: string | null;
   created_at: string;
+  organization_id: string | null;
 }
 
 export function cleanupExpiredPastes(): number {

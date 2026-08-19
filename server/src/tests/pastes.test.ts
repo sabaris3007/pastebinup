@@ -1,4 +1,11 @@
 import request from 'supertest';
+
+jest.mock('../auth', () => ({
+  requireLogin: (req: any, _res: any, next: any) => {
+    req.organizationId = 'test-company';
+    next();
+  }
+}));
 import app from '../index';
 import db from '../db';
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Eye, Clock, FileCode } from 'lucide-react';
 import { Paste } from '../types';
+import { authenticatedFetch } from '../auth';
 
 interface PasteListProps {
   onSelectPaste: (id: string) => void;
@@ -22,7 +23,7 @@ export const PasteList: React.FC<PasteListProps> = ({ onSelectPaste }) => {
       const term = searchTerm !== undefined ? searchTerm : search;
       if (term.trim()) queryParams.append('search', term.trim());
 
-      const res = await fetch(`/api/pastes?${queryParams.toString()}`);
+      const res = await authenticatedFetch(`/api/pastes?${queryParams.toString()}`);
       if (!res.ok) {
         throw new Error(`Server returned status ${res.status}`);
       }
@@ -167,4 +168,3 @@ export const PasteList: React.FC<PasteListProps> = ({ onSelectPaste }) => {
     </div>
   );
 };
-

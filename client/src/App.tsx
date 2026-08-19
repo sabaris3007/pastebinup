@@ -1,16 +1,36 @@
 import React, { useState, useEffect } from 'react';
+import type { User } from '@supabase/supabase-js';
 import { Navbar } from './components/Navbar';
 import { CreatePaste } from './components/CreatePaste';
 import { ViewPaste } from './components/ViewPaste';
 import { PasteList } from './components/PasteList';
-import { ApiDocs } from './components/ApiDocs';
+import { Login } from './components/Login';
+import { Profile } from './components/Profile';
 import { Paste } from './types';
+import { isLoginConfigured, savedDisplayName, supabase } from './auth';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'create' | 'explore' | 'docs'>('create');
+  const [activeTab, setActiveTab] = useState<'create' | 'explore' | 'profile'>('create');
   const [viewPasteId, setViewPasteId] = useState<string | null>(null);
   // Increment every time Explore becomes active to force PasteList to remount & refetch fresh data
   const [exploreKey, setExploreKey] = useState(0);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user || null);
+      if (data.session?.user && !savedDisplayName(data.session.user)) setActiveTab('profile');
+      setAuthChecked(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+      if (session?.user && !savedDisplayName(session.user)) setActiveTab('profile');
+      setAuthChecked(true);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   // Check URL pathname for direct snippet links (e.g., /paste/a7x9q2)
   useEffect(() => {
@@ -52,7 +72,7 @@ export const App: React.FC = () => {
     window.history.pushState({}, '', '/');
   };
 
-  const handleSetTab = (tab: 'create' | 'explore' | 'docs') => {
+  const handleSetTab = (tab: 'create' | 'explore' | 'profile') => {
     setViewPasteId(null);
     setActiveTab(tab);
     if (tab === 'explore') {
@@ -61,11 +81,24 @@ export const App: React.FC = () => {
     window.history.pushState({}, '', '/');
   };
 
+  if (!isLoginConfigured) {
+    return <main className="main-content"><div className="card">Set the Supabase values in <code>client/.env</code> and <code>server/.env</code> to enable login.</div></main>;
+  }
+
+  if (!authChecked) {
+    return <main className="main-content"><div className="card">Checking login…</div></main>;
+  }
+
+  if (!user) {
+    return <main className="main-content"><Login /></main>;
+  }
+
   return (
     <div className="app-container">
       <Navbar
         activeTab={activeTab}
         setActiveTab={handleSetTab}
+        user={user}
       />
 
       <main className="main-content">
@@ -84,9 +117,7 @@ export const App: React.FC = () => {
             key={exploreKey}
             onSelectPaste={handleSelectPaste}
           />
-        ) : (
-          <ApiDocs />
-        )}
+        ) : <Profile user={user} onUserUpdated={setUser} />}
       </main>
 
       <footer className="footer">

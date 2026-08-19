@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Send, Lock, Flame, EyeOff, ShieldCheck, Copy, Check, Key } from 'lucide-react';
 import { CreatePastePayload, Paste } from '../types';
+import { authenticatedFetch } from '../auth';
 
 interface CreatePasteProps {
   onPasteCreated: (paste: Paste) => void;
@@ -63,7 +64,7 @@ export const CreatePaste: React.FC<CreatePasteProps> = ({ onPasteCreated }) => {
     };
 
     try {
-      const response = await fetch('/api/pastes', {
+      const response = await authenticatedFetch('/api/pastes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
