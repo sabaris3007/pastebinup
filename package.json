@@ -12,6 +12,7 @@
     "test": "npm test --prefix server"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.1.2",
     "cors": "^2.8.5",
@@ -27,7 +28,13 @@
     "concurrently": "^8.2.2",
     "typescript": "^5.5.2"
   },
-  "keywords": ["pastebin", "code-sharing", "snippets", "express", "react"],
+  "keywords": [
+    "pastebin",
+    "code-sharing",
+    "snippets",
+    "express",
+    "react"
+  ],
   "author": "",
   "license": "MIT"
 }
