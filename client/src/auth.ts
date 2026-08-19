@@ -40,5 +40,14 @@ export async function authenticatedFetch(input: RequestInfo | URL, init: Request
   if (!token) throw new Error('Please sign in again.');
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${token}`);
-  return fetch(input, { ...init, headers });
+
+  try {
+    return await fetch(input, { ...init, headers });
+  } catch (err: any) {
+    // Retry once on transient network / cold socket drop
+    if (err?.message?.toLowerCase().includes('failed') || err?.name === 'TypeError') {
+      return await fetch(input, { ...init, headers });
+    }
+    throw err;
+  }
 }
