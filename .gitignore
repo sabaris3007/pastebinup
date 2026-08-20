@@ -5,3 +5,4 @@ server/data/*.db*
 server/dist
 client/dist
 .DS_Store
+.vercel

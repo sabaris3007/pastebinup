@@ -2,6 +2,9 @@
   "name": "pastebin-platform",
   "version": "1.0.0",
   "description": "A lightweight snippet sharing platform built with Express, React, and SQLite.",
+  "bin": {
+    "pastebin": "./bin/pastebin"
+  },
   "scripts": {
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",
     "dev:server": "npm run dev --prefix server",
@@ -13,6 +16,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
+    "@vercel/analytics": "^2.0.1",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.1.2",
     "cors": "^2.8.5",

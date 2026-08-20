@@ -37,8 +37,12 @@ router.post('/', async (req: Request, res: Response) => {
     const { title, content, language, is_private, burn_after_reading, password, ttl, custom_id } = req.body;
     const organizationId = req.organizationId!;
 
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      return res.status(400).json({ success: false, error: 'Title is required.' });
+    }
+
     if (!content || typeof content !== 'string' || !content.trim()) {
-      return res.status(400).json({ success: false, error: 'Content is required' });
+      return res.status(400).json({ success: false, error: 'Content is required.' });
     }
 
     if (content.length > 500000) {
@@ -66,7 +70,7 @@ router.post('/', async (req: Request, res: Response) => {
       pasteId = generateId(8);
     }
 
-    const pasteTitle = (title && typeof title === 'string' && title.trim()) ? title.trim() : 'Untitled Snippet';
+    const pasteTitle = title.trim();
     const pasteLang = (language && typeof language === 'string') ? language.trim().toLowerCase() : 'plaintext';
     const expiresAt = calculateExpiration(ttl);
     const deleteToken = crypto.randomBytes(16).toString('hex');

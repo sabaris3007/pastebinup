@@ -78,6 +78,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUserUpdated }) => {
         </div>
       )}
     </div>
-    <section style={{ marginTop: '2rem' }}><h2 style={{ fontSize: '1.15rem', margin: '0 0 0.75rem' }}>API documentation</h2><ApiDocs /></section>
+    <section style={{ marginTop: '2rem' }}><h2 style={{ fontSize: '1.15rem', margin: '0 0 0.75rem' }}>API Doc (Use when running locally)</h2><ApiDocs /></section>
   </div>;
 };

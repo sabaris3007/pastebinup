@@ -44,6 +44,10 @@ export const CreatePaste: React.FC<CreatePasteProps> = ({ onPasteCreated }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!title.trim()) {
+      setError('Title is required.');
+      return;
+    }
     if (!content.trim()) {
       setError('Snippet content cannot be empty.');
       return;
@@ -53,7 +57,7 @@ export const CreatePaste: React.FC<CreatePasteProps> = ({ onPasteCreated }) => {
     setError(null);
 
     const payload: CreatePastePayload = {
-      title: title.trim() || 'Untitled Snippet',
+      title: title.trim(),
       content,
       language,
       ttl,
@@ -234,6 +238,7 @@ export const CreatePaste: React.FC<CreatePasteProps> = ({ onPasteCreated }) => {
               placeholder="Title (e.g. notes.txt or main.py)"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              required
             />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
