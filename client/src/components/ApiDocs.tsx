@@ -1,9 +1,20 @@
-import React, { useState } from 'react';
-import { Terminal, Copy, Check, Code, Server, Key } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Terminal, Copy, Check, Code, Server, Key, Shield } from 'lucide-react';
+import { supabase } from '../auth';
 
 export const ApiDocs: React.FC = () => {
   const [selectedLanguage, setSelectedLanguage] = useState<'curl' | 'javascript' | 'python'>('curl');
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [token, setToken] = useState<string>('YOUR_SESSION_TOKEN');
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.access_token) {
+        setToken(data.session.access_token);
+      }
+    });
+  }, []);
 
   const baseUrl = window.location.origin;
 
@@ -11,7 +22,7 @@ export const ApiDocs: React.FC = () => {
     {
       method: 'POST',
       path: '/api/pastes',
-      description: 'Create a new text or code snippet.',
+      description: 'Create a new text or code snippet within your workspace scope.',
       params: [
         { name: 'content', type: 'string', required: true, desc: 'The text or code snippet body (Max 500KB)' },
         { name: 'title', type: 'string', required: false, desc: 'Title of the snippet (Default: "Untitled Snippet")' },
@@ -24,6 +35,7 @@ export const ApiDocs: React.FC = () => {
       ],
       code: {
         curl: `curl -X POST "${baseUrl}/api/pastes" \\
+  -H "Authorization: Bearer ${token}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "title": "Hello World",
@@ -33,7 +45,10 @@ export const ApiDocs: React.FC = () => {
   }'`,
         javascript: `const res = await fetch('${baseUrl}/api/pastes', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Authorization': 'Bearer ${token}',
+    'Content-Type': 'application/json'
+  },
   body: JSON.stringify({
     title: 'Hello World',
     content: 'console.log("Hello World!");',
@@ -45,6 +60,9 @@ const data = await res.json();
 console.log(data.paste.url, data.paste.delete_token);`,
         python: `import requests
 
+headers = {
+    "Authorization": "Bearer ${token}"
+}
 payload = {
     "title": "Hello World",
     "content": "print('Hello from Python!')",
@@ -52,7 +70,7 @@ payload = {
     "ttl": "1d"
 }
 
-res = requests.post("${baseUrl}/api/pastes", json=payload)
+res = requests.post("${baseUrl}/api/pastes", headers=headers, json=payload)
 print(res.json())`
       }
     },
@@ -65,13 +83,17 @@ print(res.json())`
         { name: 'x-paste-password', type: 'header', required: false, desc: 'Header for password-protected pastes' }
       ],
       code: {
-        curl: `curl "${baseUrl}/api/pastes/a7x9q2"`,
-        javascript: `const res = await fetch('${baseUrl}/api/pastes/a7x9q2');
+        curl: `curl "${baseUrl}/api/pastes/a7x9q2" \\
+  -H "Authorization: Bearer ${token}"`,
+        javascript: `const res = await fetch('${baseUrl}/api/pastes/a7x9q2', {
+  headers: { 'Authorization': 'Bearer ${token}' }
+});
 const data = await res.json();
 console.log(data.paste.content);`,
         python: `import requests
 
-res = requests.get("${baseUrl}/api/pastes/a7x9q2")
+headers = {"Authorization": "Bearer ${token}"}
+res = requests.get("${baseUrl}/api/pastes/a7x9q2", headers=headers)
 print(res.json()["paste"]["content"])`
       }
     },
@@ -83,13 +105,17 @@ print(res.json()["paste"]["content"])`
         { name: 'id', type: 'string', required: true, desc: 'Snippet unique ID' }
       ],
       code: {
-        curl: `curl "${baseUrl}/api/pastes/a7x9q2/raw"`,
-        javascript: `const res = await fetch('${baseUrl}/api/pastes/a7x9q2/raw');
+        curl: `curl "${baseUrl}/api/pastes/a7x9q2/raw" \\
+  -H "Authorization: Bearer ${token}"`,
+        javascript: `const res = await fetch('${baseUrl}/api/pastes/a7x9q2/raw', {
+  headers: { 'Authorization': 'Bearer ${token}' }
+});
 const text = await res.text();
 console.log(text);`,
         python: `import requests
 
-res = requests.get("${baseUrl}/api/pastes/a7x9q2/raw")
+headers = {"Authorization": "Bearer ${token}"}
+res = requests.get("${baseUrl}/api/pastes/a7x9q2/raw", headers=headers)
 print(res.text)`
       }
     },
@@ -102,14 +128,21 @@ print(res.text)`
       ],
       code: {
         curl: `curl -X DELETE "${baseUrl}/api/pastes/a7x9q2" \\
+  -H "Authorization: Bearer ${token}" \\
   -H "x-delete-token: YOUR_SECRET_DELETE_TOKEN"`,
         javascript: `await fetch('${baseUrl}/api/pastes/a7x9q2', {
   method: 'DELETE',
-  headers: { 'x-delete-token': 'YOUR_SECRET_DELETE_TOKEN' }
+  headers: {
+    'Authorization': 'Bearer ${token}',
+    'x-delete-token': 'YOUR_SECRET_DELETE_TOKEN'
+  }
 });`,
         python: `import requests
 
-headers = {"x-delete-token": "YOUR_SECRET_DELETE_TOKEN"}
+headers = {
+    "Authorization": "Bearer ${token}",
+    "x-delete-token": "YOUR_SECRET_DELETE_TOKEN"
+}
 res = requests.delete("${baseUrl}/api/pastes/a7x9q2", headers=headers)
 print(res.json())`
       }
@@ -124,14 +157,42 @@ print(res.json())`
 
   return (
     <div>
+      {/* CLI Section Card */}
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <Terminal size={20} className="text-emerald" /> Terminal CLI Tool (`bin/pastebin`)
+        </h3>
+        <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>
+          Authenticate from your terminal with your email and password, then pipe files or outputs directly into PasteBin.
+        </p>
+
+        <div className="code-container" style={{ margin: 0 }}>
+          <div className="code-header">
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>CLI Quickstart</span>
+            <button className="btn btn-secondary btn-sm" onClick={() => handleCopyCode(`pastebin login\ncat file.txt | pastebin --title "Notes"`, 999)}>
+              {copiedIndex === 999 ? <Check size={14} className="text-emerald" /> : <Copy size={14} />}
+              {copiedIndex === 999 ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          <div className="code-body" style={{ fontSize: '0.85rem' }}>
+            <span style={{ color: 'var(--text-subtle)' }}># 1. Login once with your email & password (Unix style)</span><br />
+            <strong>$ pastebin login</strong><br /><br />
+            <span style={{ color: 'var(--text-subtle)' }}># 2. Pipe files or scripts straight to PasteBin</span><br />
+            <strong>$ cat app.log | pastebin --title "Server Logs" --lang plaintext</strong><br />
+            <strong>$ pastebin --file main.py --ttl 1d</strong><br />
+            <strong>$ pastebin get &lt;id&gt;</strong>
+          </div>
+        </div>
+      </div>
+
       <div className="card">
         <div className="flex-between" style={{ flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
           <div>
             <h2 style={{ fontSize: '1.3rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Terminal size={22} className="text-emerald" /> PasteBin REST API Reference
+              <Server size={22} className="text-emerald" /> REST API Reference
             </h2>
             <p className="text-muted" style={{ fontSize: '0.875rem', marginTop: '0.2rem' }}>
-              Integrate snippet creation and retrieval into your scripts, CLI tools, and applications.
+              All endpoints require your Bearer session token.
             </p>
           </div>
 

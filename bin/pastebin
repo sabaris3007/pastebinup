@@ -5,6 +5,9 @@
  * Allows piping file contents or text directly to PasteBin from the terminal.
  * 
  * Usage:
+ *   pastebin login
+ *   pastebin whoami
+ *   pastebin logout
  *   cat script.py | pastebin --title "Script" --lang python
  *   pastebin --file main.js
  *   pastebin get <paste_id>
@@ -14,15 +17,138 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
 
 const SERVER_URL = process.env.PASTEBIN_URL || 'http://localhost:4000';
+const CONFIG_PATH = path.join(process.env.HOME || process.env.USERPROFILE || '.', '.pastebinrc');
 
 const args = process.argv.slice(2);
 
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    }
+  } catch {}
+  return null;
+}
+
+function saveConfig(data) {
+  try {
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(data, null, 2), { mode: 0o600 });
+  } catch (err) {
+    console.error('Warning: Failed to save ~/.pastebinrc:', err.message);
+  }
+}
+
+function clearConfig() {
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      fs.unlinkSync(CONFIG_PATH);
+    }
+  } catch {}
+}
+
+function getToken() {
+  if (process.env.PASTEBIN_TOKEN) {
+    return process.env.PASTEBIN_TOKEN;
+  }
+  const config = loadConfig();
+  return config ? config.token : null;
+}
+
+function makeRequest(urlStr, options, payload) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlStr);
+    const client = url.protocol === 'https:' ? https : http;
+    const headers = { ...options.headers };
+
+    if (payload) {
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Length'] = Buffer.byteLength(payload);
+    }
+
+    const req = client.request(url, {
+      method: options.method || 'GET',
+      headers
+    }, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => resolve({ statusCode: res.statusCode, headers: res.headers, body }));
+    });
+
+    req.on('error', reject);
+
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+function promptText(query) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    rl.question(query, (ans) => {
+      rl.close();
+      resolve(ans.trim());
+    });
+  });
+}
+
+function promptPassword(query) {
+  return new Promise((resolve) => {
+    process.stdout.write(query);
+    const stdin = process.stdin;
+    stdin.setEncoding('utf8');
+
+    if (!stdin.isTTY) {
+      let data = '';
+      stdin.on('data', chunk => data += chunk);
+      stdin.on('end', () => resolve(data.trim()));
+      return;
+    }
+
+    stdin.setRawMode(true);
+    stdin.resume();
+
+    let password = '';
+    const onData = (ch) => {
+      ch = ch.toString('utf8');
+      if (ch === '\n' || ch === '\r' || ch === '\u0004') {
+        stdin.setRawMode(false);
+        stdin.pause();
+        stdin.removeListener('data', onData);
+        process.stdout.write('\n');
+        resolve(password);
+      } else if (ch === '\u0003') { // Ctrl+C
+        process.stdout.write('\n');
+        process.exit(130);
+      } else if (ch === '\u0008' || ch === '\x7f') { // Backspace
+        if (password.length > 0) {
+          password = password.slice(0, -1);
+          process.stdout.write('\b \b');
+        }
+      } else {
+        password += ch;
+        process.stdout.write('*');
+      }
+    };
+    stdin.on('data', onData);
+  });
+}
+
+// Help command
 if (args.includes('--help') || args.includes('-h')) {
   console.log(`
-PasteBin CLI Client v1.0
+PasteBin CLI Client v1.1
 ========================
+Authentication:
+  pastebin login         Interactive login with email & password
+  pastebin whoami        Show current user & workspace info
+  pastebin logout        Clear local stored credentials
+
 Usage:
   cat file.txt | pastebin [options]
   pastebin --file <filepath> [options]
@@ -41,25 +167,119 @@ Options:
   process.exit(0);
 }
 
+// Command: `pastebin login`
+if (args[0] === 'login') {
+  (async () => {
+    console.log('PasteBin Terminal Login');
+    console.log('=======================');
+    const email = await promptText('Email: ');
+    if (!email) {
+      console.error('Error: Email cannot be empty.');
+      process.exit(1);
+    }
+    const password = await promptPassword('Password: ');
+    if (!password) {
+      console.error('Error: Password cannot be empty.');
+      process.exit(1);
+    }
+
+    try {
+      const res = await makeRequest(`${SERVER_URL}/api/auth/login`, { method: 'POST' }, JSON.stringify({ email, password }));
+      const data = JSON.parse(res.body);
+
+      if (!data.success || !data.token) {
+        console.error(`\nLogin failed: ${data.error || 'Invalid credentials'}`);
+        process.exit(1);
+      }
+
+      saveConfig({
+        token: data.token,
+        email: data.user.email,
+        organization_id: data.user.organization_id,
+        server: SERVER_URL
+      });
+
+      console.log(`\n✓ Logged in successfully as ${data.user.email}`);
+      if (data.user.organization_id && data.user.organization_id.startsWith('domain:')) {
+        const domain = data.user.organization_id.replace('domain:', '');
+        console.log(`  Workspace: @${domain}`);
+      } else {
+        console.log(`  Workspace: Private`);
+      }
+      process.exit(0);
+    } catch (err) {
+      console.error(`\nError connecting to server at ${SERVER_URL}:`, err.message);
+      process.exit(1);
+    }
+  })();
+  return;
+}
+
+// Command: `pastebin logout`
+if (args[0] === 'logout') {
+  clearConfig();
+  console.log('✓ Logged out successfully.');
+  process.exit(0);
+}
+
+// Command: `pastebin whoami`
+if (args[0] === 'whoami') {
+  const token = getToken();
+  if (!token) {
+    console.log('Not logged in. Run "pastebin login" to authenticate.');
+    process.exit(1);
+  }
+
+  (async () => {
+    try {
+      const res = await makeRequest(`${SERVER_URL}/api/auth/whoami`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = JSON.parse(res.body);
+
+      if (!data.success) {
+        console.error(`Session error: ${data.error || 'Please login again.'}`);
+        process.exit(1);
+      }
+
+      console.log(`Logged in as: ${data.email || 'Verified User'}`);
+      console.log(`Scope: ${data.organization_id}`);
+      process.exit(0);
+    } catch (err) {
+      console.error(`Error verifying session with ${SERVER_URL}:`, err.message);
+      process.exit(1);
+    }
+  })();
+  return;
+}
+
 // Command: `pastebin get <id>`
 if (args[0] === 'get' && args[1]) {
   const pasteId = args[1];
-  const targetUrl = new URL(`${SERVER_URL}/api/pastes/${pasteId}/raw`);
-  const client = targetUrl.protocol === 'https:' ? https : http;
-  client.get(targetUrl, (res) => {
-    let data = '';
-    res.on('data', (chunk) => data += chunk);
-    res.on('end', () => {
+  const token = getToken();
+  const headers = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  (async () => {
+    try {
+      const res = await makeRequest(`${SERVER_URL}/api/pastes/${pasteId}/raw`, { headers });
+      if (res.statusCode === 401) {
+        console.error('Error: Authentication required or login expired.');
+        console.error('Please run "pastebin login" to authenticate.');
+        process.exit(1);
+      }
       if (res.statusCode !== 200) {
         console.error(`Error: Failed to fetch paste (HTTP ${res.statusCode})`);
         process.exit(1);
       }
-      process.stdout.write(data);
-    });
-  }).on('error', (err) => {
-    console.error(`Connection Error: ${err.message}`);
-    process.exit(1);
-  });
+      process.stdout.write(res.body);
+    } catch (err) {
+      console.error(`Connection Error: ${err.message}`);
+      process.exit(1);
+    }
+  })();
   return;
 }
 
@@ -78,9 +298,16 @@ const burn = args.includes('--burn');
 const isPrivate = args.includes('--private');
 const password = getArgValue('--password');
 
-function sendPaste(content) {
+async function sendPaste(content) {
   if (!content || !content.trim()) {
     console.error('Error: Empty content. Provide text via stdin pipe or --file <path>.');
+    process.exit(1);
+  }
+
+  const token = getToken();
+  if (!token) {
+    console.error('Error: Authentication required.');
+    console.error('Please run "pastebin login" to authenticate with your email & password.');
     process.exit(1);
   }
 
@@ -95,40 +322,40 @@ function sendPaste(content) {
     custom_id: customId || undefined
   });
 
-  const url = new URL(`${SERVER_URL}/api/pastes`);
-  const client = url.protocol === 'https:' ? https : http;
-  const req = client.request(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(payload)
-    }
-  }, (res) => {
-    let body = '';
-    res.on('data', (chunk) => body += chunk);
-    res.on('end', () => {
-      try {
-        const data = JSON.parse(body);
-        if (data.success) {
-          console.log('Snippet published successfully!');
-          console.log(`URL: ${data.paste.url}`);
-          console.log(`Raw URL: ${data.paste.raw_url}`);
-          console.log(`Delete Token: ${data.paste.delete_token}`);
-        } else {
-          console.error(`Error: ${data.error}`);
-        }
-      } catch (err) {
-        console.error('Failed to parse server response:', body);
+  try {
+    const res = await makeRequest(`${SERVER_URL}/api/pastes`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
       }
-    });
-  });
+    }, payload);
 
-  req.on('error', (err) => {
+    let data;
+    try {
+      data = JSON.parse(res.body);
+    } catch {
+      console.error('Failed to parse server response:', res.body);
+      process.exit(1);
+    }
+
+    if (res.statusCode === 401 || !data.success) {
+      if (res.statusCode === 401) {
+        console.error('Error: Session expired or authentication required.');
+        console.error('Please run "pastebin login" to re-authenticate.');
+      } else {
+        console.error(`Error: ${data.error}`);
+      }
+      process.exit(1);
+    }
+
+    console.log('Snippet published successfully!');
+    console.log(`URL: ${data.paste.url}`);
+    console.log(`Raw URL: ${data.paste.raw_url}`);
+    console.log(`Delete Token: ${data.paste.delete_token}`);
+  } catch (err) {
     console.error(`Failed to connect to PasteBin server at ${SERVER_URL}:`, err.message);
-  });
-
-  req.write(payload);
-  req.end();
+    process.exit(1);
+  }
 }
 
 if (filePath) {

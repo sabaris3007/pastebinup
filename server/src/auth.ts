@@ -5,6 +5,7 @@ declare global {
   namespace Express {
     interface Request {
       organizationId?: string;
+      userEmail?: string;
     }
   }
 }
@@ -13,6 +14,20 @@ declare global {
 // verified domain is treated as a company; public-email users get a private space.
 const PUBLIC_EMAIL_DOMAINS = new Set(['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com', 'proton.me']);
 
+export function getOrganizationIdForEmail(email: string, userId: string): string {
+  const domain = email.toLowerCase().split('@')[1];
+  return !domain || PUBLIC_EMAIL_DOMAINS.has(domain) ? `user:${userId}` : `domain:${domain}`;
+}
+
+// In-memory token cache to prevent Supabase remote latency on repeated requests
+interface CachedSession {
+  organizationId: string;
+  email: string;
+  expiresAt: number;
+}
+const tokenCache = new Map<string, CachedSession>();
+const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+
 export async function requireLogin(req: Request, res: Response, next: NextFunction) {
   const url = process.env.SUPABASE_URL;
   const anonKey = process.env.SUPABASE_ANON_KEY;
@@ -20,14 +35,31 @@ export async function requireLogin(req: Request, res: Response, next: NextFuncti
   if (!url || !anonKey) return res.status(503).json({ success: false, error: 'Login is not configured yet.' });
   if (!token) return res.status(401).json({ success: false, error: 'Please sign in first.' });
 
+  // Check cache first
+  const cached = tokenCache.get(token);
+  if (cached && cached.expiresAt > Date.now()) {
+    req.organizationId = cached.organizationId;
+    req.userEmail = cached.email;
+    return next();
+  }
+
   try {
     const supabase = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data, error } = await supabase.auth.getUser(token);
     const email = data.user?.email?.toLowerCase();
     if (error || !data.user || !email) return res.status(401).json({ success: false, error: 'Your login has expired.' });
 
-    const domain = email.split('@')[1];
-    req.organizationId = !domain || PUBLIC_EMAIL_DOMAINS.has(domain) ? `user:${data.user.id}` : `domain:${domain}`;
+    const orgId = getOrganizationIdForEmail(email, data.user.id);
+    req.organizationId = orgId;
+    req.userEmail = email;
+
+    // Cache valid token
+    tokenCache.set(token, {
+      organizationId: orgId,
+      email,
+      expiresAt: Date.now() + CACHE_TTL_MS
+    });
+
     return next();
   } catch {
     return res.status(503).json({ success: false, error: 'Login service is temporarily unavailable.' });

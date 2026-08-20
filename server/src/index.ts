@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import dotenv from 'dotenv';
 import pastesRouter from './routes/pastes';
+import authRouter from './routes/auth';
 import { errorHandler } from './middleware/errorHandler';
 import { cleanupExpiredPastes } from './db';
 
@@ -29,6 +30,7 @@ const cleanupInterval = setInterval(() => {
 cleanupInterval.unref();
 
 // API Routes
+app.use('/api/auth', authRouter);
 app.use('/api/pastes', pastesRouter);
 
 app.get('/api/health', (req, res) => {
