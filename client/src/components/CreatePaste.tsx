@@ -180,6 +180,23 @@ export const CreatePaste: React.FC<CreatePasteProps> = ({ onPasteCreated }) => {
     );
   }
 
+  const handleContentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      const target = e.currentTarget;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      const tabSpaces = '    ';
+
+      const newContent = content.substring(0, start) + tabSpaces + content.substring(end);
+      setContent(newContent);
+
+      requestAnimationFrame(() => {
+        target.selectionStart = target.selectionEnd = start + tabSpaces.length;
+      });
+    }
+  };
+
   return (
     <div className="card">
       <div style={{ marginBottom: '1.25rem' }}>
@@ -236,6 +253,7 @@ export const CreatePaste: React.FC<CreatePasteProps> = ({ onPasteCreated }) => {
             placeholder="// Type or paste your code or text here..."
             value={content}
             onChange={(e) => setContent(e.target.value)}
+            onKeyDown={handleContentKeyDown}
             required
           />
         </div>
