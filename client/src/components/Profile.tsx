@@ -14,6 +14,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUserUpdated }) => {
   const [name, setName] = useState(existingName || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showApiDocs, setShowApiDocs] = useState(false);
   const email = user.email || '';
   const workspace = workspaceDetails(email);
 
@@ -78,6 +79,18 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUserUpdated }) => {
         </div>
       )}
     </div>
-    <section style={{ marginTop: '2rem' }}><h2 style={{ fontSize: '1.15rem', margin: '0 0 0.75rem' }}>API Doc (Use when running locally)</h2><ApiDocs /></section>
+    <section style={{ marginTop: '2rem' }}>
+      <div className="flex-between" style={{ marginBottom: '0.75rem' }}>
+        <h2 style={{ fontSize: '1.15rem', margin: 0 }}>API Doc (Use when running locally)</h2>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => setShowApiDocs(!showApiDocs)}
+        >
+          {showApiDocs ? 'Hide API Docs' : 'Show API Docs'}
+        </button>
+      </div>
+      {showApiDocs && <ApiDocs />}
+    </section>
   </div>;
 };
